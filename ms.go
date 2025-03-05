@@ -4,39 +4,54 @@ import "net/http"
 
 type HandleFunc func(w http.ResponseWriter, r *http.Request)
 
+// 定义routerGroup结构体，该结构体是为了存储一个一级路由所对应的所有二级路由
+// name 一级路由名字，不添加/
+// handlerMap 用于存储每个二级路由->二级路由的处理方法
+type routerGroup struct {
+	name       string
+	handlerMap map[string]HandleFunc
+}
+
+// 路由的入口，可以将多个routerGroup组合在一起
+// groups 是所有一级路由的合集
 type router struct {
-	handleFuncMap map[string]HandleFunc
+	groups []*routerGroup
 }
 
+// 服务器的启用引擎
 type Engine struct {
-	router
+	*router
 }
 
-func (r *router) Add(path string, handler HandleFunc) {
-	r.handleFuncMap[path] = handler
+// 功能：新加一个一级路由
+func (r *router) Group(name string) *routerGroup {
+	group := &routerGroup{
+		name:       name,
+		handlerMap: make(map[string]HandleFunc),
+	}
+	r.groups = append(r.groups, group)
+	return group
 }
 
-func (r *router) Get(path string, f HandleFunc) {
-
+func (rg *routerGroup) Add(name string, handler HandleFunc) {
+	rg.handlerMap[name] = handler
 }
 
-// 通过调用New方法将返回一个Engine的实例对象
 func New() *Engine {
 	return &Engine{
-		router: router{
-			make(map[string]HandleFunc),
-		},
+		router: &router{},
 	}
 }
 
 // 定义Engine结构体的一个方法Run，通过调用该方法将产生一个Http的套接字
 func (engine *Engine) Run() {
-	// 从engine中取出router，然后遍历router，从中取出path->handleFunc，
-	// NOTE: 实例化后的结构体，可以直接调用该结构体成员（该成员也是一个结构体）下的属性。
-	for path, handle := range engine.handleFuncMap {
-		// 从自定义router中取出的path->handleFunc，添加到Go Http 原生框架中。
-		http.HandleFunc(path, handle)
+	groups := engine.router.groups
+	for _, group := range groups {
+		for name, handler := range group.handlerMap {
+			http.HandleFunc("/"+group.name+name, handler)
+		}
 	}
+	//
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic(err)
